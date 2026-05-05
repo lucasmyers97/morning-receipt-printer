@@ -3,6 +3,8 @@ from urllib.request import urlopen
 import geocoder
 import datetime
 
+from escpos.printer import Usb
+
 date_input_format = '%Y-%m-%dT%X%z'
 date_output_format = '%A %B %d'
 
@@ -27,33 +29,57 @@ def main():
     forecast_json = json.loads( forecast_str )
 
     # get data from JSON
-    forecast = forecast_json['properties']['periods'][0]
-    forecast_tonight = forecast_json['properties']['periods'][1]
+    forecast_current = forecast_json['properties']['periods'][0]
+    forecast_current_time = forecast_current['name'].upper()
 
-    date = datetime.datetime.strptime(forecast['startTime'], date_input_format)
+    forecast_later = forecast_json['properties']['periods'][1]
+    forecast_later_time = forecast_later['name'].upper()
+
+    date = datetime.datetime.strptime(forecast_current['startTime'], 
+                                      date_input_format)
     date_string = date.strftime(date_output_format)
 
-    temp = str(forecast['temperature']) + forecast['temperatureUnit']
-    wind = forecast['windSpeed']
-    short_forecast = forecast['shortForecast']
-    detailed_forecast = ".\n".join( forecast['detailedForecast'].split('. ') )
+    temp = ( str(forecast_current['temperature']) 
+             + forecast_current['temperatureUnit'] )
+    wind = forecast_current['windSpeed']
+    short_forecast = forecast_current['shortForecast']
+    detailed_forecast = ".\n".join( forecast_current['detailedForecast'].split('. ') )
 
-    tonight_temp = ( str(forecast_tonight['temperature']) 
-                     + forecast_tonight['temperatureUnit'] )
-    tonight_short_forecast = forecast_tonight['shortForecast']
+    later_temp = ( str(forecast_later['temperature']) 
+                     + forecast_later['temperatureUnit'] )
+    later_short_forecast = forecast_later['shortForecast']
 
     # Format the output
     print(date_string)
-    print('='*30)
-    print('TODAY: {} {}'.format(temp, wind))
+    print('='*42)
+    print('{}: {} {}'.format(forecast_current_time, temp, wind))
     print(short_forecast)
     print()
 
     print(detailed_forecast)
     print()
 
-    print('TONIGHT: {}'.format(tonight_temp))
-    print(tonight_short_forecast)
+    print('{}: {}'.format(forecast_later_time, later_temp))
+    print(later_short_forecast)
+
+    print('='*42)
+
+    # p = Usb(0x04b8, 0x0202, 0, profile="TM-T88V")
+    # p.text(date_string + '\n')
+    # p.text('='*42 + '\n')
+    # p.text('TODAY: {} {}\n'.format(temp, wind))
+    # p.text(short_forecast + '\n')
+    # p.text('\n')
+    #
+    # p.text(detailed_forecast + '\n')
+    # p.text('\n')
+    #
+    # p.text('TONIGHT: {}\n'.format(tonight_temp))
+    # p.text(tonight_short_forecast + '\n')
+    #
+    # p.text('='*42 + '\n')
+    #
+    # p.cut()
 
 if __name__ == '__main__':
     main()
