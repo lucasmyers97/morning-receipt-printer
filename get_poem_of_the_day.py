@@ -62,15 +62,13 @@ def main():
             print()
 
         for line in poem_lines:
-            text = '\n'.join(line.text)
-
-            word_list = list(re.finditer('[\\w-]+', text))
+            text = line.text
             bold_char_end = 0
             for index in line.em_indices:
-                bold_char_start = word_list[index[0]].span()[0]
+                bold_char_start = index[0]
                 print(text[bold_char_end:bold_char_start], end='')
 
-                bold_char_end = word_list[index[1] - 1].span()[1]
+                bold_char_end = index[1]
                 print('\033[1m', end='')
                 print(text[bold_char_start:bold_char_end], end='')
                 print('\033[0m', end='')

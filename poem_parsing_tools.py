@@ -5,32 +5,37 @@ import re
 import textwrap
 
 class TextLine:
-    def __init__(self, text, align_right, padding, em_indices):
+    def __init__(self, text, em_indices):
         self.text = text
-        self.align_right = align_right
-        self.padding = padding
         self.em_indices = em_indices
 
-    def add_padding(self, line_width):
-        """
-        These are the two style tags I have seen which pad or justify the
-        poem lines. 
-        The added whitespace attempts to emulate the html formatting with plain
-        text.
-        """
-        num_spaces = int( self.padding * line_width )
-        if (num_spaces == 0) and (self.padding != 0):
-            num_spaces = 1
+def add_padding(text, padding, line_width):
+    """
+    These are the two style tags I have seen which pad or justify the
+    poem lines. 
+    The added whitespace attempts to emulate the html formatting with plain
+    text.
+    """
+    num_spaces = int( padding * line_width )
+    if (num_spaces == 0) and (padding != 0):
+        num_spaces = 1
 
-        for i,_ in enumerate(self.text):
-            self.text[i] = num_spaces*' ' + self.text[i]
+    padded_text = []
+    for line in text:
+        padded_text.append(num_spaces*' ' + line)
 
-    def add_alignment_spacing(self, line_width):
-        if not self.align_right:
-            return
-        for i,_ in enumerate(self.text):
-            num_spaces = line_width - len(self.text[i])
-            self.text[i] = num_spaces*' ' + self.text[i]
+    return padded_text
+
+def add_alignment_spacing(text, align_right, line_width):
+    if not align_right:
+        return text
+
+    right_aligned_text = []
+    for line in text:
+        num_spaces = line_width - len(line)
+        right_aligned_text.append(num_spaces*' ' + line)
+
+    return right_aligned_text
 
 def parse_browser_poem_info(driver, line_width):
     """
@@ -41,8 +46,10 @@ def parse_browser_poem_info(driver, line_width):
 
     Parameters
     ----------
-    driver: Selenium webdriver
+    driver : Selenium webdriver
         Webdriver that is already navigated to the poem url via driver.get(url).
+    line_width : int
+        Width of page where text will be printed, in number of characters
 
     Returns
     -------
@@ -95,6 +102,27 @@ def parse_browser_poem_info(driver, line_width):
     return title, authors, preface_lines
 
 def split_styles(style_text):
+    """
+    Splits inline styles of an HTML tag. 
+
+    Parameters
+    ----------
+    style_text : string
+        String of inline styles on HTML tag. 
+
+    Returns
+    -------
+    styles : array of strings
+        Array where each element is one of the inline styles of the HTML element
+
+    An example HTML tag might have the form:
+        <div style="text-indent: -1em; padding-left: 1em;">
+    The `style_text` input would then be:
+        "text-indent: -1em; padding-left: 1em;"
+    and the `styles` output would be:
+        ['text-indent:-1em', 'padding-left:1em']
+    Note that whitespace and semi-colons are eliminated
+    """
     styles = style_text.replace(' ', '').split(';')
     styles.remove('')
     return styles
@@ -104,6 +132,16 @@ def strip_html(text):
     Newlines and `<br>` tags happen to be superfluous in the poems.
     `&amp;` and `&nbsp` get converted to regular characters.
     `<i></i>` converted to `<em></em>` for bolding consistency.
+
+    Parameters
+    ----------
+    text : string
+        Inner HTML of tag representing line of a poem
+
+    Returns
+    -------
+    text : string
+        Line of a poem with all HTML removed except <em> tags.
     """
     text = re.sub('\n ', '', text)
     text = re.sub('<br>', '', text)
@@ -114,30 +152,54 @@ def strip_html(text):
 
     return text
 
-def get_em_indices(text):
+def get_em_word_indices(text):
     """
+    Return word indices of start and end of each block of text surrounded by
+    <em> tags.
+
     Returns text with `<em>` tags removed, and also returns a list of
     2-tuples, where each tuple corresponds to a bolded span of text, the
     first number in the tuple is the zero-based index of the word where the 
     bold starts, and the second is one more than where the bold ends.
     Hence, if `idx` is an element of `em_indices` then. 
+
+    Examples
+    --------
+    >>> text = 'Here <em>is some</em> example <em>bold text</em>.'
+    >>> indices = get_em_word_indices(text)
+    >>> indices
+    [(1, 3), (3, 5)]
+
+    >>> strip_text = re.sub('</?em>', '', text)
+    >>> word_split = strip_text.split(' ')
+    >>> for index in indices:
+    >>>     start = index[0]
+    >>>     end = index[1]
+    >>>     print(word_split[start:end])
+    ['is', 'some']
+    ['bold', 'text']
     """
     splits = re.split('</?em>', text)
+    for i,_ in enumerate(splits):
+        splits[i] = re.sub(r'[\.,]', '', splits[i])
 
-    em_indices = []
+    em_word_indices = []
     word_count = len(splits[0].split())
     for i in range(1, len(splits), 2):
         bold_length = len(splits[i].split())
         non_bold_length = len(splits[i + 1].split())
 
-        em_indices.append( (word_count, bold_length + word_count) )
+        em_word_indices.append( (word_count, bold_length + word_count) )
 
-        word_count += bold_length + non_bold_length - 1
+        word_count += bold_length + non_bold_length
 
-    return em_indices
+    return em_word_indices
 
 def check_for_leading_space(string):
     return True if re.match(r'^\s', string) else False
+
+def delete_trailing_spaces(string):
+    return re.sub(r'\s+$', '', string)
 
 def parse_browser_poem_text(driver, line_width):
     """
@@ -201,15 +263,19 @@ def parse_browser_poem_text(driver, line_width):
             padding = float(padding_match.group(1)) / 100
 
         text = strip_html(text)
-        em_indices = get_em_indices(text)
+        em_word_indices = get_em_word_indices(text)
         text = re.sub('</?em>', '', text)
 
-        text = textwrap.wrap(text, replace_whitespace=True, width=line_width)
+        text = textwrap.wrap(text, 
+                             replace_whitespace=True, 
+                             drop_whitespace=False,
+                             width=line_width)
 
-        # if multiple lines, only get rid of one -- preserves poem formatting
-        for line in text:
-            if check_for_leading_space(line):
-                line = line[1:]
+        # if multiple spaces, only get rid of one -- preserves poem formatting
+        for i,_ in enumerate(text):
+            if check_for_leading_space(text[i]):
+                text[i] = text[i][1:]
+            text[i] = delete_trailing_spaces(text[i])
 
         # add two spaces to show that it was originally one line
         n_leading_spaces = 2
@@ -221,12 +287,19 @@ def parse_browser_poem_text(driver, line_width):
             else:
                 text[i] = n_leading_spaces*' ' + text[i]
 
-        text_lines.append(TextLine(text, align_right, padding, em_indices))
+        text = add_padding(text, padding, line_width)
+        text = add_alignment_spacing(text, align_right, line_width)
 
-    for line in text_lines:
-        line.add_padding(line_width)
+        # Get poem lines as single string again
+        text = '\n'.join(text)
 
-    for line in text_lines:
-        line.add_alignment_spacing(line_width)
+        # translate bold indexing from word- to character-level
+        word_list = list(re.finditer('\\S+', text))
+        em_indices = [(word_list[idx[0]].span()[0], 
+                       word_list[idx[1] - 1].span()[1]) 
+                      for idx in em_word_indices]
+
+        text_lines.append(TextLine(text, em_indices))
+
 
     return text_lines
