@@ -9,6 +9,13 @@ class TextLine:
         self.text = text
         self.em_indices = em_indices
 
+def delete_unprintable_characters(text):
+    unprintable_characters = [('\u2009', ' '), ('\u200a', '')]
+    for char in unprintable_characters:
+        text = text.replace(char[0], char[1])
+
+    return text
+
 def add_padding(text, padding, line_width):
     """
     These are the two style tags I have seen which pad or justify the
@@ -72,16 +79,22 @@ def parse_browser_poem_info(driver, line_width):
     main_content = driver.find_element(By.ID, 'mainContent')
 
     header = main_content.find_element(By.TAG_NAME, 'header')
-    title = header.find_element(By.CLASS_NAME, 'type-gamma').text
-    authors = [author.text for author in header.find_elements(By.CLASS_NAME, 'type-kappa')]
+    title = delete_unprintable_characters(header.find_element(By.CLASS_NAME, 'type-gamma').text)
+    title = textwrap.wrap(title, 
+                          replace_whitespace=True, 
+                          width=line_width)
+    title = '\n'.join(title)
+    authors = [delete_unprintable_characters(author.text) 
+               for author in header.find_elements(By.CLASS_NAME, 'type-kappa')]
 
     try:
         preface = main_content.find_element(By.CLASS_NAME, 'type-paragraph-sm').text
+        preface = delete_unprintable_characters(preface)
         preface_lines = [line for line in preface.split('\n')]
         for i,_ in enumerate(preface_lines):
             preface_lines[i] = textwrap.wrap(preface_lines[i], 
                                              replace_whitespace=True, 
-                                             width=line_width)
+                                             width=line_width - 4)
 
             # if multiple lines, only get rid of one -- preserves poem formatting
             for line in preface_lines[i]:
@@ -298,6 +311,8 @@ def parse_browser_poem_text(driver, line_width):
         em_indices = [(word_list[idx[0]].span()[0], 
                        word_list[idx[1] - 1].span()[1]) 
                       for idx in em_word_indices]
+
+        text = delete_unprintable_characters(text)
 
         text_lines.append(TextLine(text, em_indices))
 

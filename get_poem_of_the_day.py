@@ -1,7 +1,11 @@
 from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 from poem_parsing_tools import parse_browser_poem_info, parse_browser_poem_text
 import re
 import time
+
+from escpos.printer import Usb
 
 def main():
 
@@ -33,11 +37,14 @@ def main():
             ['https://www.poetryfoundation.org/poems/54587/spring-song-56d2351b45223', 'spring-song']
             ]
 
-    # urls = [['https://www.poetryfoundation.org/poems/55028/breakfast-with-thom-gunn', 'breakfast-with-thom-gunn']]
+    urls = [['https://www.poetryfoundation.org/poetrymagazine/poems/58584/harolds-chicken-shack-86', 'harolds-chicken-shack-86']]
 
-    driver = webdriver.Firefox()
+    p = Usb(0x04b8, 0x0202, 0, profile="TM-T88V")
+
+    options = Options()
+    options.add_argument('--headless')
+    driver = webdriver.Firefox(options=options)
     for url in urls:
-
         driver.get(url[0])
 
         time.sleep(5)
@@ -45,37 +52,71 @@ def main():
         title, authors, preface = parse_browser_poem_info(driver, line_width)
         poem_lines = parse_browser_poem_text(driver, line_width)
 
-        print(title)
-        for author in authors:
-            print(author)
+        p.text(line_width*'=' + '\n')
 
-        print()
+        p.text(title + '\n')
+        for author in authors:
+            p.text(author + '\n')
+
+        p.ln()
 
         if preface:
-            print('\033[1m', end='')
+            p.set(bold=True)
             for line in preface:
                 text = ('\n' + 4*' ').join(line)
-                print(4*' ', text, sep='')
-            print('\033[0m', end='')
+                p.text(4*' ' + text + '\n')
+            p.set(bold=False)
 
-            print()
-            print()
+            p.ln(2)
 
         for line in poem_lines:
             text = line.text
             bold_char_end = 0
             for index in line.em_indices:
                 bold_char_start = index[0]
-                print(text[bold_char_end:bold_char_start], end='')
+                p.text(text[bold_char_end:bold_char_start])
 
                 bold_char_end = index[1]
-                print('\033[1m', end='')
-                print(text[bold_char_start:bold_char_end], end='')
-                print('\033[0m', end='')
+                p.set(bold=True)
+                p.text(text[bold_char_start:bold_char_end])
+                p.set(bold=False)
 
-            print(text[bold_char_end:])
+            p.text(text[bold_char_end:] + '\n')
 
-        print(line_width*'=')
+        p.text(line_width*'=' + '\n')
+        p.cut()
+
+        # print(title)
+        # for author in authors:
+        #     print(author)
+        #
+        # print()
+        #
+        # if preface:
+        #     print('\033[1m', end='')
+        #     for line in preface:
+        #         text = ('\n' + 4*' ').join(line)
+        #         print(4*' ', text, sep='')
+        #     print('\033[0m', end='')
+        #
+        #     print()
+        #     print()
+        #
+        # for line in poem_lines:
+        #     text = line.text
+        #     bold_char_end = 0
+        #     for index in line.em_indices:
+        #         bold_char_start = index[0]
+        #         print(text[bold_char_end:bold_char_start], end='')
+        #
+        #         bold_char_end = index[1]
+        #         print('\033[1m', end='')
+        #         print(text[bold_char_start:bold_char_end], end='')
+        #         print('\033[0m', end='')
+        #
+        #     print(text[bold_char_end:])
+        #
+        # print(line_width*'=')
 
     driver.close()
 
