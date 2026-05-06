@@ -1,17 +1,105 @@
+"""
+Note: for Epson TM-T88V, product id and vendor id are typically: 0x04b8:0x0202
+"""
+
 import json
 from urllib.request import urlopen
 import geocoder
 import datetime
+import argparse
 
 from escpos.printer import Usb
 
 date_input_format = '%Y-%m-%dT%X%z'
 date_output_format = '%A %B %d'
 
+desc = """Get weather forecast from NWS.
+Format nicely, then print to terminal or a receipt.
+"""
+
+class Forecast:
+    def __init__(self, forecast):
+        self.time = forecast['name'].upper()
+        date = datetime.datetime.strptime(forecast['startTime'], 
+                                          date_input_format)
+        self.date = date.strftime(date_output_format)
+        self.temp = ( str(forecast['temperature']) + forecast['temperatureUnit'] )
+        self.wind = forecast['windSpeed']
+        self.short_forecast = forecast['shortForecast']
+        self.detailed_forecast = ".\n".join( forecast['detailedForecast'].split('. ') )
+
+
+def get_commandline_args():
+    parser = argparse.ArgumentParser(
+                        prog='GetWeatherForecast',
+                        description=desc)
+
+    parser.add_argument('--print_to_receipt',
+                        action='store_true',
+                        help='Whether to print to receipt -- alternative is to terminal.') 
+    parser.add_argument('--vendor_id',
+                        type=lambda x: int(x, 0),
+                        help='Vendor ID of printer. Check `lsusb` for the first part of a number formatted as xxxx:xxxx')
+    parser.add_argument('--product_id',
+                        type=lambda x: int(x, 0),
+                        help='Product ID of printer. Check `lsusb` for the second part of a number formatted as xxxx:xxxx')
+    parser.add_argument('--printer_model',
+                        help='Model of the printer (see Python escpos for formatting details)')
+
+    args = parser.parse_args()
+
+    return args.print_to_receipt, args.vendor_id, args.product_id, args.printer_model
+
+
+def print_forecast_to_terminal(forecast_current, forecast_later):
+
+    print(forecast_current.date)
+    print('='*42)
+    print('{}: {} {}'.format(forecast_current.time, 
+                             forecast_current.temp, 
+                             forecast_current.wind))
+    print(forecast_current.short_forecast)
+    print()
+
+    print(forecast_current.detailed_forecast)
+    print()
+
+    print('{}: {}'.format(forecast_later.time, forecast_later.temp))
+    print(forecast_later.short_forecast)
+
+    print('='*42)
+
+
+def print_forecast_to_receipt(forecast_current, forecast_later,
+                              vendor_id, product_id, printer_model):
+
+    p = Usb(vendor_id, product_id, profile=printer_model)
+    p.text(forecast_current.date + '\n')
+    p.text('='*42 + '\n')
+    p.text('{}: {} {}\n'.format(forecast_current.time,
+                                forecast_current.temp,
+                                forecast_current.wind))
+    p.text(forecast_current.short_forecast + '\n')
+    p.text('\n')
+
+    p.text(forecast_current.detailed_forecast + '\n')
+    p.text('\n')
+
+    p.text('{}: {}\n'.format(forecast_later.time, forecast_later.temp))
+    p.text(forecast_later.short_forecast + '\n')
+
+    p.text('='*42 + '\n')
+
+    p.cut()
+
+
 def print_json(file):
     print(json.dumps(file, indent=2))
 
+
 def main():
+
+    print_to_receipt, vendor_id, product_id, printer_model = get_commandline_args()
 
     # get latitude & longitude from ip
     g = geocoder.ip('me')
@@ -29,57 +117,16 @@ def main():
     forecast_json = json.loads( forecast_str )
 
     # get data from JSON
-    forecast_current = forecast_json['properties']['periods'][0]
-    forecast_current_time = forecast_current['name'].upper()
+    forecast_current = Forecast(forecast_json['properties']['periods'][0])
+    forecast_later = Forecast(forecast_json['properties']['periods'][1])
 
-    forecast_later = forecast_json['properties']['periods'][1]
-    forecast_later_time = forecast_later['name'].upper()
+    if print_to_receipt:
+        print_forecast_to_receipt(forecast_current, forecast_later,
+                                  vendor_id, product_id, printer_model)
 
-    date = datetime.datetime.strptime(forecast_current['startTime'], 
-                                      date_input_format)
-    date_string = date.strftime(date_output_format)
+    else:
+        print_forecast_to_terminal(forecast_current, forecast_later)
 
-    temp = ( str(forecast_current['temperature']) 
-             + forecast_current['temperatureUnit'] )
-    wind = forecast_current['windSpeed']
-    short_forecast = forecast_current['shortForecast']
-    detailed_forecast = ".\n".join( forecast_current['detailedForecast'].split('. ') )
-
-    later_temp = ( str(forecast_later['temperature']) 
-                     + forecast_later['temperatureUnit'] )
-    later_short_forecast = forecast_later['shortForecast']
-
-    # Format the output
-    print(date_string)
-    print('='*42)
-    print('{}: {} {}'.format(forecast_current_time, temp, wind))
-    print(short_forecast)
-    print()
-
-    print(detailed_forecast)
-    print()
-
-    print('{}: {}'.format(forecast_later_time, later_temp))
-    print(later_short_forecast)
-
-    print('='*42)
-
-    # p = Usb(0x04b8, 0x0202, 0, profile="TM-T88V")
-    # p.text(date_string + '\n')
-    # p.text('='*42 + '\n')
-    # p.text('TODAY: {} {}\n'.format(temp, wind))
-    # p.text(short_forecast + '\n')
-    # p.text('\n')
-    #
-    # p.text(detailed_forecast + '\n')
-    # p.text('\n')
-    #
-    # p.text('TONIGHT: {}\n'.format(tonight_temp))
-    # p.text(tonight_short_forecast + '\n')
-    #
-    # p.text('='*42 + '\n')
-    #
-    # p.cut()
 
 if __name__ == '__main__':
     main()
