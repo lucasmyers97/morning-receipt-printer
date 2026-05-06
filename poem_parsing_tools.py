@@ -140,10 +140,10 @@ def parse_browser_poem_info(driver, line_width):
             author_image = main_content.find_element(By.TAG_NAME, 'img')
             image_links.append(author_image.get_attribute('src'))
         driver.close()
-        driver.switch_to.window(original_window)
     except NoSuchElementException:
         driver.close()
-        driver.switch_to.window(original_window)
+
+    driver.switch_to.window(original_window)
 
     return title, author_text, preface_lines, image_links
 
@@ -250,7 +250,7 @@ def get_em_indices(em_text):
     for i in range(1, len(splits), 2):
         start_idx = char_count
         end_idx = char_count + len(splits[i])
-        indices.append( (start_idx, end_idx) )
+        indices.append( [start_idx, end_idx] )
 
         char_count = end_idx + len(splits[i + 1])
 
@@ -261,6 +261,9 @@ def get_em_indices(em_text):
 
 def check_for_leading_space(string):
     return True if re.match(r'^\s', string) else False
+
+def check_for_leading_triple_space(string):
+    return True if re.match(r'^ {3}', string) else False
 
 def delete_trailing_spaces(string):
     return re.sub(r'\s+$', '', string)
@@ -278,7 +281,30 @@ def wrap_text(wrapper, text, em_indices):
     for line in wrapped_text:
         line_indices.append(cur_index)
         cur_index += len(line)
+    
+    i = 0
+    index_offset = 0
+    cur_line_index = 0
+    for j, _ in enumerate(em_indices):
+        while True:
+            if em_indices[j][0] < cur_line_index + len(wrapped_text[i]):
+                em_indices[j][0] += index_offset
+                break
+            cur_line_index += len(wrapped_text[i])
+            i += 1
+            index_offset += 2
 
+        while True:
+            if em_indices[j][1] < cur_line_index + len(wrapped_text[i]):
+                em_indices[j][1] += index_offset
+                break
+            cur_line_index += len(wrapped_text[i])
+            i += 1
+            index_offset += 2
+
+
+
+    # add <em> tags bag into text lines
     i = len(wrapped_text) - 1
     for index in reversed(em_indices):
         while True:
@@ -341,6 +367,7 @@ def parse_browser_poem_text(driver, line_width):
 
     text_lines = []
     wrapper = textwrap.TextWrapper(expand_tabs=False,
+                                   subsequent_indent=2*' ',
                                    replace_whitespace=False, 
                                    drop_whitespace=False,
                                    width=line_width)
@@ -379,21 +406,12 @@ def parse_browser_poem_text(driver, line_width):
 
         text = wrap_text(wrapper, text, em_indices)
 
-        # if multiple spaces, only get rid of one -- preserves poem formatting
+        # if triple spaces, only get rid of one -- preserves poem formatting
+        # two spaces indent from textwrap, plus one leftover from between words
         for i,_ in enumerate(text):
-            if check_for_leading_space(text[i]):
+            if check_for_leading_triple_space(text[i]):
                 text[i] = text[i][1:]
             text[i] = delete_trailing_spaces(text[i])
-        
-        # add two spaces to show that it was originally one line
-        n_leading_spaces = 2
-        for i, _ in enumerate(text):
-            if i == 0:
-                continue
-            if align_right:
-                text[i] = text[i] + n_leading_spaces*' '
-            else:
-                text[i] = n_leading_spaces*' ' + text[i]
         
         text = add_padding(text, padding, line_width)
         text = add_alignment_spacing(text, align_right, line_width)
@@ -402,45 +420,6 @@ def parse_browser_poem_text(driver, line_width):
         text = '\n'.join(text)
 
         em_indices, text = get_em_indices(text)
-
-        # em_word_indices = get_em_word_indices(text)
-        # text = re.sub('</?em>', '', text)
-        #
-        # text = textwrap.wrap(text, 
-        #                      replace_whitespace=True, 
-        #                      drop_whitespace=False,
-        #                      width=line_width)
-        #
-        # # if multiple spaces, only get rid of one -- preserves poem formatting
-        # for i,_ in enumerate(text):
-        #     if check_for_leading_space(text[i]):
-        #         text[i] = text[i][1:]
-        #     text[i] = delete_trailing_spaces(text[i])
-        #
-        # # add two spaces to show that it was originally one line
-        # n_leading_spaces = 2
-        # for i, _ in enumerate(text):
-        #     if i == 0:
-        #         continue
-        #     if align_right:
-        #         text[i] = text[i] + n_leading_spaces*' '
-        #     else:
-        #         text[i] = n_leading_spaces*' ' + text[i]
-        #
-        # text = add_padding(text, padding, line_width)
-        # text = add_alignment_spacing(text, align_right, line_width)
-        #
-        # # Get poem lines as single string again
-        # text = '\n'.join(text)
-
-        # translate bold indexing from word- to character-level
-        # word_list = list(re.finditer('\\S+', text))
-        # print(word_list)
-        # print(em_word_indices)
-        # em_indices = [(word_list[idx[0]].span()[0], 
-        #                word_list[idx[1] - 1].span()[1]) 
-        #               for idx in em_word_indices]
-
 
         text_lines.append(TextLine(text, em_indices))
 
