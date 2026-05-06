@@ -6,3 +6,6 @@ Once I get a receipt printer it will print them out in physical form using a Ras
 
 Open to suggestions for other things to print.
 I have an idea of using an old telephone answering machine to play audio if the poems have readings (they sometimes do), but I'm unsure how to send such signals with the Pi.
+
+Note: not stable or necessarily working well. 
+Only posted so that I can easily update the code on the Raspberry Pi.

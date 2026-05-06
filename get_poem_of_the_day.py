@@ -1,20 +1,43 @@
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.by import By
 
 from PIL import Image
 import requests
 from io import BytesIO
+import argparse
 
 from poem_parsing_tools import parse_browser_poem_info, parse_browser_poem_text
 
 from escpos.printer import Usb
 
-def navigate_to_poem_of_the_day():
+desc = """Gets poem-of-the-day from poetryfoundation, formats 
+and prints it using a receipt printer, 
+including author headshot at the end of the poem.
+"""
+
+def get_commandline_args():
+    parser = argparse.ArgumentParser(
+                        prog='GetPoemOfTheDay',
+                        description=desc)
+
+    parser.add_argument('--driver_path',
+                        default='',
+                        help='Path of geckodriver for webscraping (typically only needed for ARM devices)') 
+
+    args = parser.parse_args()
+
+    return args.driver_path
+
+
+def navigate_to_poem_of_the_day(driver_path):
     poem_of_the_day_url = 'https://www.poetryfoundation.org/poems/poem-of-the-day'
     options = Options()
-    # options.add_argument('--headless')
-    driver = webdriver.Firefox(options=options)
+    options.add_argument('--headless')
+
+    service = Service(driver_path)
+    driver = webdriver.Firefox(options=options, service=service)
     driver.get(poem_of_the_day_url)
 
     read_more = driver.find_element(By.LINK_TEXT, 'Read More')
@@ -64,14 +87,24 @@ def print_poem_body(printer, poem_lines):
         printer.text(text[bold_char_end:] + '\n')
 
 
+def print_image_from_link(printer, link):
+        response = requests.get(link)
+        im = Image.open(BytesIO(response.content))
+        ratio = 512 / im.width
+        (width, height) = (int(ratio * im.width), int(ratio * im.height))
+        im_resized = im.resize((width, height))
+
+        printer.image(im_resized)
+
+
 def main():
 
     line_width = 42
     printer = Usb(0x04b8, 0x0202, 0, profile="TM-T88V")
 
-    driver = navigate_to_poem_of_the_day()
+    driver_path = get_commandline_args()
 
-    driver.get('https://www.poetryfoundation.org/poems/151342/cinco-de-mayo')
+    driver = navigate_to_poem_of_the_day(driver_path)
 
     title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
     poem_lines = parse_browser_poem_text(driver, line_width)
@@ -82,13 +115,7 @@ def main():
     print_border(printer, line_width)
 
     for link in image_links:
-        response = requests.get(link)
-        im = Image.open(BytesIO(response.content))
-        ratio = 512 / im.width
-        (width, height) = (int(ratio * im.width), int(ratio * im.height))
-        im_resized = im.resize((width, height))
-
-        printer.image(im_resized)
+        print_image_from_link(printer, link)
 
     printer.cut()
 

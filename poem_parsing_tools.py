@@ -4,14 +4,6 @@ from selenium.common.exceptions import NoSuchElementException
 import re
 import textwrap
 
-"""
-Need to rewrite tomorrow. 
-Don't even get <em> word indices.
-Just get <em> character indices.
-Use textwrap so that it doesn't delete any characters.
-Move <em> indices when deleting or adding whitespace (should think about how to do this).
-"""
-
 class TextLine:
     def __init__(self, text, em_indices):
         self.text = text
