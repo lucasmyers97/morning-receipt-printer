@@ -10,6 +10,10 @@ class TextLine:
         self.em_indices = em_indices
 
 def delete_unprintable_characters(text):
+    """
+    Deletes characters which the receipt printer is not able to print.
+    Replaces them with the closest character that is printable.
+    """
     unprintable_characters = [('\u2009', ' '), ('\u200a', '')]
     for char in unprintable_characters:
         text = text.replace(char[0], char[1])
@@ -18,10 +22,8 @@ def delete_unprintable_characters(text):
 
 def add_padding(text, padding, line_width):
     """
-    These are the two style tags I have seen which pad or justify the
-    poem lines. 
-    The added whitespace attempts to emulate the html formatting with plain
-    text.
+    Given a padding (between 0 and 1), this function appends whitespace
+    roughly corresponding to that percentage of `line_width`.
     """
     num_spaces = int( padding * line_width )
     if (num_spaces == 0) and (padding != 0):
@@ -34,6 +36,10 @@ def add_padding(text, padding, line_width):
     return padded_text
 
 def add_alignment_spacing(text, align_right, line_width):
+    """
+    If `align_right` is true, appends whitespace until the end of the line is
+    comensurate with `line_width`.
+    """
     if not align_right:
         return text
 
@@ -50,6 +56,8 @@ def parse_browser_poem_info(driver, line_width):
     this method retrieves relevant info from the webpage, including the title,
     authors, and preface (e.g. "Translated from..." or other relevant quotes 
     before the poem text) as plain text.
+    `line_width` is necessary for formatting the title and preface_lines
+    appropriately.
 
     Parameters
     ----------
@@ -219,7 +227,9 @@ def parse_browser_poem_text(driver, line_width):
     Given a webdriver `driver` THAT IS ALREADY NAVIGATED TO THE POEM WEBPAGE, 
     this method retrieves the lines of the poem in plain text, including
     limited formatting (like indenting or justification). 
-    Note that `<em>` tags are left in for purposes of italicizing or bolding.
+    The character indexes at which `<em>` tags are found is also returned
+    in the return object.
+    The calling code can then use this to format text.
 
     Parameters
     ----------
@@ -228,8 +238,9 @@ def parse_browser_poem_text(driver, line_width):
 
     Returns
     -------
-    text_lines : array of strings
+    text_lines : array of TextLine objects
         Lines of the poem, already formatted with extra whitespace.
+        Also included are character indices of `<em>` tags.
 
     Note about poetryfoundation webpages: the actual poem has the class name
     `poem-body`. The lines of the poem are then individual `<div>` tags which
