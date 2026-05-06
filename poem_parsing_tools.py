@@ -129,6 +129,7 @@ def parse_browser_poem_info(driver, line_width):
     except NoSuchElementException:
         preface_lines = None
 
+    original_window = driver.current_window_handle
     image_links = []
     try:
         author_links = [author.find_element(By.TAG_NAME, 'a').get_attribute('href') for author in authors]
@@ -138,8 +139,11 @@ def parse_browser_poem_info(driver, line_width):
             main_content = driver.find_element(By.ID, 'mainContent')
             author_image = main_content.find_element(By.TAG_NAME, 'img')
             image_links.append(author_image.get_attribute('src'))
+        driver.close()
+        driver.switch_to.window(original_window)
     except NoSuchElementException:
-        pass
+        driver.close()
+        driver.switch_to.window(original_window)
 
     return title, author_text, preface_lines, image_links
 

@@ -2,6 +2,10 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 
+from PIL import Image
+import requests
+from io import BytesIO
+
 from poem_parsing_tools import parse_browser_poem_info, parse_browser_poem_text
 
 from escpos.printer import Usb
@@ -9,7 +13,7 @@ from escpos.printer import Usb
 def navigate_to_poem_of_the_day():
     poem_of_the_day_url = 'https://www.poetryfoundation.org/poems/poem-of-the-day'
     options = Options()
-    options.add_argument('--headless')
+    # options.add_argument('--headless')
     driver = webdriver.Firefox(options=options)
     driver.get(poem_of_the_day_url)
 
@@ -76,6 +80,15 @@ def main():
     print_poem_info(printer, title, authors, preface)
     print_poem_body(printer, poem_lines)
     print_border(printer, line_width)
+
+    for link in image_links:
+        response = requests.get(link)
+        im = Image.open(BytesIO(response.content))
+        ratio = 512 / im.width
+        (width, height) = (int(ratio * im.width), int(ratio * im.height))
+        im_resized = im.resize((width, height))
+
+        printer.image(im_resized)
 
     printer.cut()
 
