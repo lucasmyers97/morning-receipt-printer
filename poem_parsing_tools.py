@@ -4,6 +4,14 @@ from selenium.common.exceptions import NoSuchElementException
 import re
 import textwrap
 
+"""
+Need to rewrite tomorrow. 
+Don't even get <em> word indices.
+Just get <em> character indices.
+Use textwrap so that it doesn't delete any characters.
+Move <em> indices when deleting or adding whitespace (should think about how to do this).
+"""
+
 class TextLine:
     def __init__(self, text, em_indices):
         self.text = text
@@ -92,8 +100,9 @@ def parse_browser_poem_info(driver, line_width):
                           replace_whitespace=True, 
                           width=line_width)
     title = '\n'.join(title)
-    authors = [delete_unprintable_characters(author.text) 
-               for author in header.find_elements(By.CLASS_NAME, 'type-kappa')]
+    authors = header.find_elements(By.CLASS_NAME, 'type-kappa')
+
+    author_text = [delete_unprintable_characters(author.text) for author in authors]
 
     try:
         preface = main_content.find_element(By.CLASS_NAME, 'type-paragraph-sm').text
@@ -120,7 +129,19 @@ def parse_browser_poem_info(driver, line_width):
     except NoSuchElementException:
         preface_lines = None
 
-    return title, authors, preface_lines
+    image_links = []
+    try:
+        author_links = [author.find_element(By.TAG_NAME, 'a').get_attribute('href') for author in authors]
+        for link in author_links:
+            driver.switch_to.new_window('tab')
+            driver.get(link)
+            main_content = driver.find_element(By.ID, 'mainContent')
+            author_image = main_content.find_element(By.TAG_NAME, 'img')
+            image_links.append(author_image.get_attribute('src'))
+    except NoSuchElementException:
+        pass
+
+    return title, author_text, preface_lines, image_links
 
 def split_styles(style_text):
     """
@@ -216,11 +237,67 @@ def get_em_word_indices(text):
 
     return em_word_indices
 
+
+def get_em_indices(em_text):
+    splits = re.split('</?em>', em_text)
+
+    indices = []
+    char_count = len(splits[0])
+    for i in range(1, len(splits), 2):
+        start_idx = char_count
+        end_idx = char_count + len(splits[i])
+        indices.append( (start_idx, end_idx) )
+
+        char_count = end_idx + len(splits[i + 1])
+
+    text = ''.join(splits)
+
+    return indices, text
+
+
 def check_for_leading_space(string):
     return True if re.match(r'^\s', string) else False
 
 def delete_trailing_spaces(string):
     return re.sub(r'\s+$', '', string)
+
+def wrap_text(wrapper, text, em_indices):
+    """
+    Wraps text so that it fits within a certain column-width, as dictated by
+    the `wrapper` object.
+    Also adds back in `<em>` tags according to `em_indices`.
+    """
+    wrapped_text = wrapper.wrap(text)
+
+    line_indices = []
+    cur_index = 0
+    for line in wrapped_text:
+        line_indices.append(cur_index)
+        cur_index += len(line)
+
+    i = len(wrapped_text) - 1
+    for index in reversed(em_indices):
+        while True:
+            if index[1] < line_indices[i]:
+                i -= 1
+                continue
+            line = wrapped_text[i]
+            idx = index[1] - line_indices[i]
+            wrapped_text[i] = line[:idx] + '</em>' + line[idx:]
+            break
+
+        while True:
+            if index[0] < line_indices[i]:
+                i -= 1
+                continue
+            line = wrapped_text[i]
+            idx = index[0] - line_indices[i]
+            wrapped_text[i] = line[:idx] + '<em>' + line[idx:]
+            break
+
+
+    return wrapped_text
+
 
 def parse_browser_poem_text(driver, line_width):
     """
@@ -259,6 +336,10 @@ def parse_browser_poem_text(driver, line_width):
     poem_lines = poem_body.find_elements(By.XPATH, '*')
 
     text_lines = []
+    wrapper = textwrap.TextWrapper(expand_tabs=False,
+                                   replace_whitespace=False, 
+                                   drop_whitespace=False,
+                                   width=line_width)
     for line in poem_lines:
         # cuts off last ';', splits by '; ' to get pure styles
         styles = split_styles( line.get_attribute('style') )
@@ -287,20 +368,19 @@ def parse_browser_poem_text(driver, line_width):
             padding = float(padding_match.group(1)) / 100
 
         text = strip_html(text)
-        em_word_indices = get_em_word_indices(text)
-        text = re.sub('</?em>', '', text)
+        text = text.replace('\t', 4*' ')
+        text = delete_unprintable_characters(text)
 
-        text = textwrap.wrap(text, 
-                             replace_whitespace=True, 
-                             drop_whitespace=False,
-                             width=line_width)
+        em_indices, text = get_em_indices(text)
+
+        text = wrap_text(wrapper, text, em_indices)
 
         # if multiple spaces, only get rid of one -- preserves poem formatting
         for i,_ in enumerate(text):
             if check_for_leading_space(text[i]):
                 text[i] = text[i][1:]
             text[i] = delete_trailing_spaces(text[i])
-
+        
         # add two spaces to show that it was originally one line
         n_leading_spaces = 2
         for i, _ in enumerate(text):
@@ -310,20 +390,53 @@ def parse_browser_poem_text(driver, line_width):
                 text[i] = text[i] + n_leading_spaces*' '
             else:
                 text[i] = n_leading_spaces*' ' + text[i]
-
+        
         text = add_padding(text, padding, line_width)
         text = add_alignment_spacing(text, align_right, line_width)
-
+        
         # Get poem lines as single string again
         text = '\n'.join(text)
 
-        # translate bold indexing from word- to character-level
-        word_list = list(re.finditer('\\S+', text))
-        em_indices = [(word_list[idx[0]].span()[0], 
-                       word_list[idx[1] - 1].span()[1]) 
-                      for idx in em_word_indices]
+        em_indices, text = get_em_indices(text)
 
-        text = delete_unprintable_characters(text)
+        # em_word_indices = get_em_word_indices(text)
+        # text = re.sub('</?em>', '', text)
+        #
+        # text = textwrap.wrap(text, 
+        #                      replace_whitespace=True, 
+        #                      drop_whitespace=False,
+        #                      width=line_width)
+        #
+        # # if multiple spaces, only get rid of one -- preserves poem formatting
+        # for i,_ in enumerate(text):
+        #     if check_for_leading_space(text[i]):
+        #         text[i] = text[i][1:]
+        #     text[i] = delete_trailing_spaces(text[i])
+        #
+        # # add two spaces to show that it was originally one line
+        # n_leading_spaces = 2
+        # for i, _ in enumerate(text):
+        #     if i == 0:
+        #         continue
+        #     if align_right:
+        #         text[i] = text[i] + n_leading_spaces*' '
+        #     else:
+        #         text[i] = n_leading_spaces*' ' + text[i]
+        #
+        # text = add_padding(text, padding, line_width)
+        # text = add_alignment_spacing(text, align_right, line_width)
+        #
+        # # Get poem lines as single string again
+        # text = '\n'.join(text)
+
+        # translate bold indexing from word- to character-level
+        # word_list = list(re.finditer('\\S+', text))
+        # print(word_list)
+        # print(em_word_indices)
+        # em_indices = [(word_list[idx[0]].span()[0], 
+        #                word_list[idx[1] - 1].span()[1]) 
+        #               for idx in em_word_indices]
+
 
         text_lines.append(TextLine(text, em_indices))
 
