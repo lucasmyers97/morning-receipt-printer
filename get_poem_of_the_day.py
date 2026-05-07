@@ -19,7 +19,7 @@ and prints it using a receipt printer,
 including author headshot at the end of the poem.
 """
 
-def get_commandline_args() -> tuple[str, int, int, str, int]:
+def get_commandline_args() -> tuple[str, bool, int, int, str, int]:
     """
     Parses argument inputs from the commandline (only `driver_path` in this
     case).
@@ -31,6 +31,11 @@ def get_commandline_args() -> tuple[str, int, int, str, int]:
     parser.add_argument('--driver_path',
                         default='',
                         help='Path of geckodriver for webscraping (typically only needed for ARM devices)') 
+
+
+    parser.add_argument('--print_to_receipt',
+                        action='store_true',
+                        help='Whether to print to receipt -- alternative is to terminal.') 
     parser.add_argument('--vendor_id',
                         type=lambda x: int(x, 0),
                         help='Vendor ID of printer. Check `lsusb` for the first part of a number formatted as xxxx:xxxx')
@@ -45,7 +50,12 @@ def get_commandline_args() -> tuple[str, int, int, str, int]:
 
     args = parser.parse_args()
 
-    return args.driver_path, args.vendor_id, args.product_id, args.printer_model, args.line_width
+    return (args.driver_path, 
+            args.print_to_receipt, 
+            args.vendor_id, 
+            args.product_id, 
+            args.printer_model, 
+            args.line_width)
 
 
 def create_driver(driver_path: str) -> webdriver.Firefox:
@@ -81,7 +91,7 @@ def navigate_to_poem_of_the_day(driver: webdriver.Firefox) -> webdriver.Firefox:
     return driver
 
 
-def print_border(printer: Usb, line_width: int):
+def print_border_to_receipt(printer: Usb, line_width: int):
     """
     Prints top (or bottom) border of receipt poem.
     Just a `line_width` number of '=' characters and a newline.
@@ -89,7 +99,7 @@ def print_border(printer: Usb, line_width: int):
     printer.text(line_width*'=' + '\n')
 
 
-def print_poem_info(printer: Usb, title: str, authors: list[str], preface: list[str] | None):
+def print_poem_info_to_receipt(printer: Usb, title: str, authors: list[str], preface: list[str] | None):
     """
     Prints formatted `title`, list of `authors`, and `preface` for the poem
     to the receipt printer.
@@ -110,7 +120,7 @@ def print_poem_info(printer: Usb, title: str, authors: list[str], preface: list[
         printer.ln(2)
 
 
-def print_poem_body(printer: Usb, poem_lines: list[TextLine]):
+def print_poem_body_to_receipt(printer: Usb, poem_lines: list[TextLine]):
     """
     Prints formatted poem body to receipt printer given a list of `TextLine`
     objects `poem_lines`, which contain the text of each line, as well as
@@ -132,7 +142,7 @@ def print_poem_body(printer: Usb, poem_lines: list[TextLine]):
         printer.text(text[bold_char_end:] + '\n')
 
 
-def print_image_from_link(printer: Usb, link: str):
+def print_image_from_link_to_receipt(printer: Usb, link: str):
     """
     Prints image to receipt printer, given an internet link to that image.
     """
@@ -145,12 +155,75 @@ def print_image_from_link(printer: Usb, link: str):
     printer.image(im_resized)
 
 
+def print_border_to_terminal(line_width: int):
+    """
+    Prints top (or bottom) border of receipt poem.
+    Just a `line_width` number of '=' characters and a newline.
+    """
+    print(line_width*'=')
+
+
+def print_poem_info_to_terminal(title: str, authors: list[str], preface: list[str] | None):
+    """
+    Prints formatted `title`, list of `authors`, and `preface` for the poem
+    to the terminal.
+    """
+    print(title)
+    for author in authors:
+        print(author)
+
+    print()
+
+    if preface:
+        print('\033[1m', end='')
+        for line in preface:
+            text = ('\n' + 4*' ').join(line)
+            print(4*' ' + text)
+        print('\033[0m', end='')
+
+        print()
+        print()
+
+
+def print_poem_body_to_terminal(poem_lines: list[TextLine]):
+    """
+    Prints formatted poem body to terminal given a list of `TextLine`
+    objects `poem_lines`, which contain the text of each line, as well as
+    indices corresponding to italics (which will be bolded in the actual
+    terminal). 
+    """
+    for line in poem_lines:
+        text = line.text
+        bold_char_end = 0
+        for index in line.em_indices:
+            bold_char_start = index[0]
+            print(text[bold_char_end:bold_char_start], end='')
+
+            bold_char_end = index[1]
+            print('\033[1m', end='')
+            print(text[bold_char_start:bold_char_end], end='')
+            print('\033[0m', end='')
+
+        print(text[bold_char_end:])
+
+
+def print_image_from_link_to_terminal(link: str):
+    """
+    Shows image in default image viewer, given an internet link to that image.
+    """
+    response = requests.get(link)
+    im = Image.open(BytesIO(response.content))
+    im.show()
+
+
 def main():
 
-    line_width = 42
-    driver_path, vendor_id, product_id, printer_model, line_width  = get_commandline_args()
-    printer = Usb(vendor_id, product_id, profile=printer_model)
-
+    (driver_path, 
+     print_to_receipt, 
+     vendor_id, 
+     product_id, 
+     printer_model, 
+     line_width) = get_commandline_args()
 
     driver = create_driver(driver_path)
     try: 
@@ -158,15 +231,25 @@ def main():
         title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
         poem_lines = parse_browser_poem_text(driver, line_width)
 
-        print_border(printer, line_width)
-        print_poem_info(printer, title, authors, preface)
-        print_poem_body(printer, poem_lines)
-        print_border(printer, line_width)
+        if print_to_receipt:
+            printer = Usb(vendor_id, product_id, profile=printer_model)
+            print_border_to_receipt(printer, line_width)
+            print_poem_info_to_receipt(printer, title, authors, preface)
+            print_poem_body_to_receipt(printer, poem_lines)
+            print_border_to_receipt(printer, line_width)
 
-        for link in image_links:
-            print_image_from_link(printer, link)
+            for link in image_links:
+                print_image_from_link_to_receipt(printer, link)
 
-        printer.cut()
+            printer.cut()
+        else:
+            print_border_to_terminal(line_width)
+            print_poem_info_to_terminal(title, authors, preface)
+            print_poem_body_to_terminal(poem_lines)
+            print_border_to_terminal(line_width)
+
+            for link in image_links:
+                print_image_from_link_to_terminal(link)
 
         driver.quit()
     except Exception as e:
