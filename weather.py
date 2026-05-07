@@ -1,5 +1,5 @@
 """
-Note: for Epson TM-T88V, product id and vendor id are typically: 0x04b8:0x0202
+Note: for Epson TM-T88V, vendor id and product id are typically: 0x04b8:0x0202
 """
 
 import json
@@ -19,9 +19,14 @@ date_output_format = '%A %B %d'
 
 desc = """Get weather forecast from NWS.
 Format nicely, then print to terminal or a receipt.
+If printing to a terminal, only `line_width` argument is needed.
 """
 
-def get_commandline_args():
+def get_commandline_args() -> tuple[bool, int, int, str, int]:
+    """
+    Parses arguments from the commandline, mostly relating to details about
+    the receipt printer.
+    """
     parser = argparse.ArgumentParser(
                         prog='GetWeatherForecast',
                         description=desc)
@@ -59,7 +64,7 @@ def get_image_from_link(link: str) -> Image.Image:
 
 
 class Forecast:
-    def __init__(self, forecast):
+    def __init__(self, forecast: dict):
         self.time = forecast['name'].upper()
         date = datetime.datetime.strptime(forecast['startTime'], 
                                           date_input_format)
@@ -71,7 +76,9 @@ class Forecast:
         self.icon = get_image_from_link(forecast['icon'])
 
 
-def print_forecast_to_terminal(forecast_current, forecast_later, line_width):
+def print_forecast_to_terminal(forecast_current: Forecast, 
+                               forecast_later: Forecast, 
+                               line_width: int):
 
     print(forecast_current.date)
     print('='*line_width)
@@ -93,8 +100,12 @@ def print_forecast_to_terminal(forecast_current, forecast_later, line_width):
     forecast_later.icon.show()
 
 
-def print_forecast_to_receipt(forecast_current, forecast_later,
-                              vendor_id, product_id, printer_model, line_width):
+def print_forecast_to_receipt(forecast_current: Forecast, 
+                              forecast_later: Forecast,
+                              vendor_id: int, 
+                              product_id: int, 
+                              printer_model: str, 
+                              line_width: int):
 
     p = Usb(vendor_id, product_id, profile=printer_model)
 
@@ -122,7 +133,10 @@ def print_forecast_to_receipt(forecast_current, forecast_later,
     p.cut()
 
 
-def print_json(file):
+def print_json(file: dict):
+    """
+    Prints JSON dictionary in a way that is easy to read.
+    """
     print(json.dumps(file, indent=2))
 
 
@@ -135,6 +149,7 @@ def main():
     lat, lon = g.latlng
 
     # query weather service about forecast, make JSON
+    # Note: need to query about location before querying about forecast
     location_url = 'https://api.weather.gov/points/{},{}'
     with urlopen(location_url.format(lat, lon)) as response:
         location_str = response.read().decode('utf-8')
