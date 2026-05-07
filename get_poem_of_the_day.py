@@ -7,8 +7,10 @@ from PIL import Image
 import requests
 from io import BytesIO
 import argparse
+import sys
+import traceback
 
-from poem_parsing_tools import parse_browser_poem_info, parse_browser_poem_text
+from poem_parsing_tools import TextLine, parse_browser_poem_info, parse_browser_poem_text
 
 from escpos.printer import Usb
 
@@ -17,7 +19,11 @@ and prints it using a receipt printer,
 including author headshot at the end of the poem.
 """
 
-def get_commandline_args():
+def get_commandline_args() -> str:
+    """
+    Parses argument inputs from the commandline (only `driver_path` in this
+    case).
+    """
     parser = argparse.ArgumentParser(
                         prog='GetPoemOfTheDay',
                         description=desc)
@@ -31,13 +37,26 @@ def get_commandline_args():
     return args.driver_path
 
 
-def navigate_to_poem_of_the_day(driver_path):
-    poem_of_the_day_url = 'https://www.poetryfoundation.org/poems/poem-of-the-day'
+def create_driver(driver_path: str) -> webdriver.Firefox:
+    """
+    Creates Selenium webdriver using a Firefox browser.
+    For the Raspberry Pi a custom geckodriver executable which was compiled for
+    ARM architecture needs to be specified, hence the `driver_path` parameter.
+    """
     options = Options()
-    options.add_argument('--headless')
-
+    # options.add_argument('--headless')
     service = Service(driver_path)
+
     driver = webdriver.Firefox(options=options, service=service)
+
+    return driver
+
+
+def navigate_to_poem_of_the_day(driver: webdriver.Firefox) -> webdriver.Firefox:
+    """
+    Given a Selenium webdriver `driver`, navigate 
+    """
+    poem_of_the_day_url = 'https://www.poetryfoundation.org/poems/poem-of-the-day'
     driver.get(poem_of_the_day_url)
 
     read_more = driver.find_element(By.LINK_TEXT, 'Read More')
@@ -50,11 +69,20 @@ def navigate_to_poem_of_the_day(driver_path):
 
     return driver
 
-def print_border(printer, line_width):
+
+def print_border(printer: Usb, line_width: int):
+    """
+    Prints top (or bottom) border of receipt poem.
+    Just a `line_width` number of '=' characters and a newline.
+    """
     printer.text(line_width*'=' + '\n')
 
 
-def print_poem_info(printer, title, authors, preface):
+def print_poem_info(printer: Usb, title: str, authors: list[str], preface: list[str] | None):
+    """
+    Prints formatted `title`, list of `authors`, and `preface` for the poem
+    to the receipt printer.
+    """
     printer.text(title + '\n')
     for author in authors:
         printer.text(author + '\n')
@@ -71,7 +99,13 @@ def print_poem_info(printer, title, authors, preface):
         printer.ln(2)
 
 
-def print_poem_body(printer, poem_lines):
+def print_poem_body(printer: Usb, poem_lines: list[TextLine]):
+    """
+    Prints formatted poem body to receipt printer given a list of `TextLine`
+    objects `poem_lines`, which contain the text of each line, as well as
+    indices corresponding to italics (which will be bolded in the actual
+    receipt). 
+    """
     for line in poem_lines:
         text = line.text
         bold_char_end = 0
@@ -87,39 +121,48 @@ def print_poem_body(printer, poem_lines):
         printer.text(text[bold_char_end:] + '\n')
 
 
-def print_image_from_link(printer, link):
-        response = requests.get(link)
-        im = Image.open(BytesIO(response.content))
-        ratio = 512 / im.width
-        (width, height) = (int(ratio * im.width), int(ratio * im.height))
-        im_resized = im.resize((width, height))
+def print_image_from_link(printer: Usb, link: str):
+    """
+    Prints image to receipt printer, given an internet link to that image.
+    """
+    response = requests.get(link)
+    im = Image.open(BytesIO(response.content))
+    ratio = 512 / im.width
+    (width, height) = (int(ratio * im.width), int(ratio * im.height))
+    im_resized = im.resize((width, height))
 
-        printer.image(im_resized)
+    printer.image(im_resized)
 
 
 def main():
 
     line_width = 42
-    printer = Usb(0x04b8, 0x0202, 0, profile="TM-T88V")
+    printer = Usb(0x04b8, 0x0202, profile="TM-T88V")
 
     driver_path = get_commandline_args()
 
-    driver = navigate_to_poem_of_the_day(driver_path)
+    driver = create_driver(driver_path)
+    try: 
+        driver = navigate_to_poem_of_the_day(driver)
+        title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
+        poem_lines = parse_browser_poem_text(driver, line_width)
 
-    title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
-    poem_lines = parse_browser_poem_text(driver, line_width)
+        print_border(printer, line_width)
+        print_poem_info(printer, title, authors, preface)
+        print_poem_body(printer, poem_lines)
+        print_border(printer, line_width)
 
-    print_border(printer, line_width)
-    print_poem_info(printer, title, authors, preface)
-    print_poem_body(printer, poem_lines)
-    print_border(printer, line_width)
+        for link in image_links:
+            print_image_from_link(printer, link)
 
-    for link in image_links:
-        print_image_from_link(printer, link)
+        printer.cut()
 
-    printer.cut()
+        driver.quit()
+    except Exception as e:
+        driver.quit()
+        traceback.print_tb(e.__traceback__, file=sys.stderr)
+        print(e, file=sys.stderr)
 
-    driver.close()
 
 if __name__ == '__main__':
     main()
