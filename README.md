@@ -51,7 +51,7 @@ python3 get_poem_of_the_day.py --line_width 50
 ```
 To print any other poem to the terminal:
 ``` bash
-python get_poem_of_the_day.py --line_width 42 --poem_url https://www.poetryfoundation.org/link/to/poem
+python3 get_poem_of_the_day.py --line_width 42 --poem_url https://www.poetryfoundation.org/link/to/poem
 ```
 (Note that you cannot just copy and past this one, you must provide a link to the poem you want).
 
@@ -78,7 +78,7 @@ python3 get_weather_forecast.py --print_to_receipt --vendor_id 0x04b8 --product_
 ```
 or the poem of the day as:
 ``` bash
-python get_poem_of_the_day.py --line_width 42 --print_to_receipt --vendor_id 0x04b8 --product_id 0x0202 --printer_model TM-T88V
+python3 get_poem_of_the_day.py --line_width 42 --print_to_receipt --vendor_id 0x04b8 --product_id 0x0202 --printer_model TM-T88V
 ```
 
 ## Raspberry Pi 2 (ARMv7) setup
@@ -103,11 +103,13 @@ tar -xvf geckodriver-v0.34.0-linux-armv7l.tar.gz
 # move geckodriver binary to where you want it (usually ~/.local/bin)
 mv geckodriver ~/.local/bin
 ```
-Then, when running the `get_poem_of_the_day.py` script, you will need to provide a location to the geckodriver binary:
+Note that for the latest geckodriver binary release, you should navigate to the [releases page](https://github.com/jamesmortensen/geckodriver-arm-binaries/releases) and then copy the links to the `armv7l` `.tar.gz` and `.tar.gz.md5` files. 
+
+When running the `get_poem_of_the_day.py` script, you will need to provide a location to the geckodriver binary:
 ``` bash
-python get_poem_of_the_day.py --line_width 42 --print_to_receipt --vendor_id 0x04b8 --product_id 0x0202 --printer_model TM-T88V --driver_path /home/lucas/.local/bin
+python3 get_poem_of_the_day.py --line_width 42 --print_to_receipt --vendor_id 0x04b8 --product_id 0x0202 --printer_model TM-T88V --driver_path /home/lucas/.local/bin
 ```
-where the `--driver_path` argument is just a global argument to where your  `geckodriver` binary lives.
+where the `--driver_path` argument is just a global path to where your  `geckodriver` binary lives.
 
 ## Automation suggestions
 
