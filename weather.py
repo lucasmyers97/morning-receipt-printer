@@ -37,10 +37,13 @@ def get_commandline_args():
                         help='Product ID of printer. Check `lsusb` for the second part of a number formatted as xxxx:xxxx')
     parser.add_argument('--printer_model',
                         help='Model of the printer (see Python escpos for formatting details)')
+    parser.add_argument('--line_width',
+                        type=int,
+                        help='Width of receipt line')
 
     args = parser.parse_args()
 
-    return args.print_to_receipt, args.vendor_id, args.product_id, args.printer_model
+    return args.print_to_receipt, args.vendor_id, args.product_id, args.printer_model, args.line_width
 
 
 def get_image_from_link(link: str) -> Image.Image:
@@ -68,10 +71,10 @@ class Forecast:
         self.icon = get_image_from_link(forecast['icon'])
 
 
-def print_forecast_to_terminal(forecast_current, forecast_later):
+def print_forecast_to_terminal(forecast_current, forecast_later, line_width):
 
     print(forecast_current.date)
-    print('='*42)
+    print('='*line_width)
     print('{}: {} {}'.format(forecast_current.time, 
                              forecast_current.temp, 
                              forecast_current.wind))
@@ -84,14 +87,14 @@ def print_forecast_to_terminal(forecast_current, forecast_later):
     print('{}: {}'.format(forecast_later.time, forecast_later.temp))
     print(forecast_later.short_forecast)
 
-    print('='*42)
+    print('='*line_width)
 
     forecast_current.icon.show()
     forecast_later.icon.show()
 
 
 def print_forecast_to_receipt(forecast_current, forecast_later,
-                              vendor_id, product_id, printer_model):
+                              vendor_id, product_id, printer_model, line_width):
 
     p = Usb(vendor_id, product_id, profile=printer_model)
 
@@ -99,7 +102,7 @@ def print_forecast_to_receipt(forecast_current, forecast_later,
     p.ln()
 
     p.text(forecast_current.date + '\n')
-    p.text('='*42 + '\n')
+    p.text('='*line_width + '\n')
     p.text('{}: {} {}\n'.format(forecast_current.time,
                                 forecast_current.temp,
                                 forecast_current.wind))
@@ -112,7 +115,7 @@ def print_forecast_to_receipt(forecast_current, forecast_later,
     p.text('{}: {}\n'.format(forecast_later.time, forecast_later.temp))
     p.text(forecast_later.short_forecast + '\n')
 
-    p.text('='*42 + '\n')
+    p.text('='*line_width + '\n')
 
     p.image(forecast_later.icon, center=True)
 
@@ -125,7 +128,7 @@ def print_json(file):
 
 def main():
 
-    print_to_receipt, vendor_id, product_id, printer_model = get_commandline_args()
+    print_to_receipt, vendor_id, product_id, printer_model, line_width = get_commandline_args()
 
     # get latitude & longitude from ip
     g = geocoder.ip('me')
@@ -148,10 +151,10 @@ def main():
 
     if print_to_receipt:
         print_forecast_to_receipt(forecast_current, forecast_later,
-                                  vendor_id, product_id, printer_model)
+                                  vendor_id, product_id, printer_model, line_width)
 
     else:
-        print_forecast_to_terminal(forecast_current, forecast_later)
+        print_forecast_to_terminal(forecast_current, forecast_later, line_width)
 
 
 if __name__ == '__main__':
