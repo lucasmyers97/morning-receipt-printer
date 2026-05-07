@@ -1,7 +1,3 @@
-"""
-Note: for Epson TM-T88V, vendor id and product id are typically: 0x04b8:0x0202
-"""
-
 import json
 from urllib.request import urlopen
 import geocoder
