@@ -44,7 +44,7 @@ def create_driver(driver_path: str) -> webdriver.Firefox:
     ARM architecture needs to be specified, hence the `driver_path` parameter.
     """
     options = Options()
-    # options.add_argument('--headless')
+    options.add_argument('--headless')
     service = Service(driver_path)
 
     driver = webdriver.Firefox(options=options, service=service)
