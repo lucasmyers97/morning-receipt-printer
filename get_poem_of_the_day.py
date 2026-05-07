@@ -19,7 +19,7 @@ and prints it using a receipt printer,
 including author headshot at the end of the poem.
 """
 
-def get_commandline_args() -> str:
+def get_commandline_args() -> tuple[str, int, int, str, int]:
     """
     Parses argument inputs from the commandline (only `driver_path` in this
     case).
@@ -31,10 +31,21 @@ def get_commandline_args() -> str:
     parser.add_argument('--driver_path',
                         default='',
                         help='Path of geckodriver for webscraping (typically only needed for ARM devices)') 
+    parser.add_argument('--vendor_id',
+                        type=lambda x: int(x, 0),
+                        help='Vendor ID of printer. Check `lsusb` for the first part of a number formatted as xxxx:xxxx')
+    parser.add_argument('--product_id',
+                        type=lambda x: int(x, 0),
+                        help='Product ID of printer. Check `lsusb` for the second part of a number formatted as xxxx:xxxx')
+    parser.add_argument('--printer_model',
+                        help='Model of the printer (see Python escpos for formatting details)')
+    parser.add_argument('--line_width',
+                        type=int,
+                        help='Width of receipt line')
 
     args = parser.parse_args()
 
-    return args.driver_path
+    return args.driver_path, args.vendor_id, args.product_id, args.printer_model, args.line_width
 
 
 def create_driver(driver_path: str) -> webdriver.Firefox:
@@ -137,9 +148,9 @@ def print_image_from_link(printer: Usb, link: str):
 def main():
 
     line_width = 42
-    printer = Usb(0x04b8, 0x0202, profile="TM-T88V")
+    driver_path, vendor_id, product_id, printer_model, line_width  = get_commandline_args()
+    printer = Usb(vendor_id, product_id, profile=printer_model)
 
-    driver_path = get_commandline_args()
 
     driver = create_driver(driver_path)
     try: 
