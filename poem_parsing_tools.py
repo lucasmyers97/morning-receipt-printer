@@ -1,3 +1,4 @@
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 
@@ -5,11 +6,12 @@ import re
 import textwrap
 
 class TextLine:
-    def __init__(self, text, em_indices):
+    def __init__(self, text: str, em_indices: list[list[int]]):
         self.text = text
         self.em_indices = em_indices
 
-def delete_unprintable_characters(text):
+
+def delete_unprintable_characters(text: str) -> str:
     """
     Deletes characters which the receipt printer is not able to print.
     Replaces them with the closest character that is printable.
@@ -20,10 +22,12 @@ def delete_unprintable_characters(text):
 
     return text
 
-def add_padding(text, padding, line_width):
+
+def add_padding(text: list[str], padding: float, line_width: int) -> list[str]:
     """
     Given a padding (between 0 and 1), this function appends whitespace
-    roughly corresponding to that percentage of `line_width`.
+    roughly corresponding to that percentage of `line_width` to each line in
+    the list of strings `text`.
     """
     num_spaces = int( padding * line_width )
     if (num_spaces == 0) and (padding != 0):
@@ -35,10 +39,11 @@ def add_padding(text, padding, line_width):
 
     return padded_text
 
-def add_alignment_spacing(text, align_right, line_width):
+
+def add_alignment_spacing(text: list[str], align_right: bool, line_width: int) -> list[str]:
     """
     If `align_right` is true, appends whitespace until the end of the line is
-    comensurate with `line_width`.
+    comensurate with `line_width` to all lines in list of strings `text`.
     """
     if not align_right:
         return text
@@ -50,12 +55,16 @@ def add_alignment_spacing(text, align_right, line_width):
 
     return right_aligned_text
 
-def parse_browser_poem_info(driver, line_width):
+
+def parse_browser_poem_info(driver: webdriver.Firefox, 
+                            line_width: int) -> tuple[str, list[str], list[list[str]] | None, list[str]]:
     """
     Given a webdriver `driver` THAT IS ALREADY NAVIGATED TO THE POEM WEBPAGE, 
     this method retrieves relevant info from the webpage, including the title,
     authors, and preface (e.g. "Translated from..." or other relevant quotes 
     before the poem text) as plain text.
+    It also navigates to the author page and finds the image link of the 
+    headshot.
     `line_width` is necessary for formatting the title and preface_lines
     appropriately.
 
@@ -78,11 +87,13 @@ def parse_browser_poem_info(driver, line_width):
 
     Note about poetryfoundation webpages: mainContent is the ID of everything
     relevant to specific poem (i.e. not the top bar, recommended on bottom, 
-    etc.). There are nested `header` tags containing the title and authors,
-    so it doesn't matter which we retrieve. The title has class `type-gamma`
-    and the authors `type-kappa`, the only such in the specific header.
+    etc.). 
+    There are nested `header` tags containing the title and authors,
+    so it doesn't matter which header we retrieve. 
+    The title has class `type-gamma` and the authors `type-kappa`, the only 
+    such in the specific header.
     Finally, the preface is hard to pin down but seems to consistently have
-    class `type-paragraph-sm`. It contains newlines for formatting.
+    class `type-paragraph-sm`. 
     """
     main_content = driver.find_element(By.ID, 'mainContent')
 
@@ -100,32 +111,40 @@ def parse_browser_poem_info(driver, line_width):
         preface = main_content.find_element(By.CLASS_NAME, 'type-paragraph-sm').text
         preface = delete_unprintable_characters(preface)
         preface_lines = [line for line in preface.split('\n')]
+
+        # Use textwrap to make sure each line of the preface fits within borders
+        preface_lines_wrapped = []
         for i,_ in enumerate(preface_lines):
-            preface_lines[i] = textwrap.wrap(preface_lines[i], 
-                                             replace_whitespace=True, 
-                                             width=line_width - 4)
+            preface_lines_wrapped.append(textwrap.wrap(preface_lines[i], 
+                                                       replace_whitespace=False, 
+                                                       width=line_width - 4)
+                                         )
 
             # if multiple lines, only get rid of one -- preserves poem formatting
-            for line in preface_lines[i]:
-                if check_for_leading_space(line):
-                    line = line[1:]
+            for j,_ in enumerate(preface_lines_wrapped[i]):
+                if check_for_leading_space(preface_lines_wrapped[i][j]):
+                    preface_lines_wrapped[i][j] = preface_lines_wrapped[i][j][1:]
 
             # add two spaces to show that it was originally one line
             n_leading_spaces = 2
-            for j, _ in enumerate(preface_lines[i]):
+            for j, _ in enumerate(preface_lines_wrapped[i]):
                 if j == 0:
                     continue
                 else:
-                    preface_lines[i][j] = n_leading_spaces*' ' + preface_lines[i][j]
+                    preface_lines_wrapped[i][j] = n_leading_spaces*' ' + preface_lines_wrapped[i][j]
 
     except NoSuchElementException:
-        preface_lines = None
+        preface_lines_wrapped = None
 
+    # open a new tab to navigate to author page, get image
+    # close tab when done
     original_window = driver.current_window_handle
     image_links = []
     try:
         author_links = [author.find_element(By.TAG_NAME, 'a').get_attribute('href') for author in authors]
         for link in author_links:
+            if not link:
+                continue
             driver.switch_to.new_window('tab')
             driver.get(link)
             main_content = driver.find_element(By.ID, 'mainContent')
@@ -137,16 +156,18 @@ def parse_browser_poem_info(driver, line_width):
 
     driver.switch_to.window(original_window)
 
-    return title, author_text, preface_lines, image_links
+    return title, author_text, preface_lines_wrapped, image_links
 
-def split_styles(style_text):
+
+def split_styles(style_text: str | None) -> list[str]:
     """
     Splits inline styles of an HTML tag. 
 
     Parameters
     ----------
-    style_text : string
-        String of inline styles on HTML tag. 
+    style_text : string | None
+        String of inline styles on HTML tag. May be none if HTML element has
+        no styles.
 
     Returns
     -------
@@ -161,11 +182,15 @@ def split_styles(style_text):
         ['text-indent:-1em', 'padding-left:1em']
     Note that whitespace and semi-colons are eliminated
     """
+    if not style_text:
+        return []
+
     styles = style_text.replace(' ', '').split(';')
     styles.remove('')
     return styles
 
-def strip_html(text):
+
+def strip_html(text: str) -> str:
     """
     Newlines and `<br>` tags happen to be superfluous in the poems.
     `&amp;` and `&nbsp` get converted to regular characters.
@@ -190,51 +215,41 @@ def strip_html(text):
 
     return text
 
-def get_em_word_indices(text):
-    """
-    Return word indices of start and end of each block of text surrounded by
-    <em> tags.
 
-    Returns text with `<em>` tags removed, and also returns a list of
-    2-tuples, where each tuple corresponds to a bolded span of text, the
-    first number in the tuple is the zero-based index of the word where the 
-    bold starts, and the second is one more than where the bold ends.
-    Hence, if `idx` is an element of `em_indices` then. 
+def get_em_indices(em_text: str) -> tuple[ list[list[int]], str ]:
+    """
+    Gets character indices of start and end of block of italicized text as
+    dictated by `<em>` `</em>` HTML tags. 
+    Also strips text of `<em>` tags and returns stripped text.
+
+    Parameters
+    ----------
+    em_text : str
+        Text which may contain `<em>` tags
+
+    Returns
+    -------
+    em_indices : list of list of ints
+        List with elements length-2 lists of ints that specify the beginning
+        and ending character indices of each span of italic characters.
+    stripped_text : str
+        `em_text` input but with the `<em>` tags removed.
 
     Examples
     --------
-    >>> text = 'Here <em>is some</em> example <em>bold text</em>.'
-    >>> indices = get_em_word_indices(text)
-    >>> indices
-    [(1, 3), (3, 5)]
+    >>> text = '<em>Bold text</em> and not bold text and <em>more bold text</em>!'
+    >>> em_indices, stripped_text = get_em_indices(text)
+    >>> print(em_indices)
+    [[0, 9], [32, 46]]
 
-    >>> strip_text = re.sub('</?em>', '', text)
-    >>> word_split = strip_text.split(' ')
-    >>> for index in indices:
-    >>>     start = index[0]
-    >>>     end = index[1]
-    >>>     print(word_split[start:end])
-    ['is', 'some']
-    ['bold', 'text']
+    >>> print(stripped_text)
+    Bold text and not bold text and more bold text!
+
+    >>> for index in em_indices:
+            print(stripped_text[index[0]:index[1]])
+    Bold text
+    more bold text
     """
-    splits = re.split('</?em>', text)
-    for i,_ in enumerate(splits):
-        splits[i] = re.sub(r'[\.,]', '', splits[i])
-
-    em_word_indices = []
-    word_count = len(splits[0].split())
-    for i in range(1, len(splits), 2):
-        bold_length = len(splits[i].split())
-        non_bold_length = len(splits[i + 1].split())
-
-        em_word_indices.append( (word_count, bold_length + word_count) )
-
-        word_count += bold_length + non_bold_length
-
-    return em_word_indices
-
-
-def get_em_indices(em_text):
     splits = re.split('</?em>', em_text)
 
     indices = []
@@ -251,20 +266,43 @@ def get_em_indices(em_text):
     return indices, text
 
 
-def check_for_leading_space(string):
+def check_for_leading_space(string: str) -> bool:
     return True if re.match(r'^\s', string) else False
 
-def check_for_leading_triple_space(string):
+
+def check_for_leading_triple_space(string: str) -> bool:
     return True if re.match(r'^ {3}', string) else False
 
-def delete_trailing_spaces(string):
+
+def delete_trailing_spaces(string: str) -> str:
     return re.sub(r'\s+$', '', string)
 
-def wrap_text(wrapper, text, em_indices):
+
+def wrap_text(wrapper: textwrap.TextWrapper, 
+              text: str, 
+              em_indices: list[list[int]]) -> list[str]:
     """
     Wraps text so that it fits within a certain column-width, as dictated by
     the `wrapper` object.
     Also adds back in `<em>` tags according to `em_indices`.
+
+    Parameters
+    ----------
+    wrapper : textwrap.TextWrapper
+        Object which will wrap the text.
+        The algorithm expects expand_tabs=False, subsequent_indent=2*' ',
+        replace_whitespace=False, drop_whitespace=False.
+    text : str
+        text to wrap
+    em_indices : list[list[int]]
+        Should be a list whose elements are pairs of indices describing the
+        beginning and ending character of italicized sections of `text`
+
+    Returns
+    -------
+    wrapped_text : list of strings
+        Each element is a new line of the wrapped text. `<em>` tags have been
+        added based on `em_indices`.
     """
     wrapped_text = wrapper.wrap(text)
 
@@ -294,8 +332,6 @@ def wrap_text(wrapper, text, em_indices):
             i += 1
             index_offset += 2
 
-
-
     # add <em> tags bag into text lines
     i = len(wrapped_text) - 1
     for index in reversed(em_indices):
@@ -317,11 +353,10 @@ def wrap_text(wrapper, text, em_indices):
             wrapped_text[i] = line[:idx] + '<em>' + line[idx:]
             break
 
-
     return wrapped_text
 
 
-def parse_browser_poem_text(driver, line_width):
+def parse_browser_poem_text(driver: webdriver.Firefox, line_width: int) -> list[TextLine]:
     """
     Given a webdriver `driver` THAT IS ALREADY NAVIGATED TO THE POEM WEBPAGE, 
     this method retrieves the lines of the poem in plain text, including
@@ -364,7 +399,6 @@ def parse_browser_poem_text(driver, line_width):
                                    drop_whitespace=False,
                                    width=line_width)
     for line in poem_lines:
-        # cuts off last ';', splits by '; ' to get pure styles
         styles = split_styles( line.get_attribute('style') )
         text = line.get_attribute('innerHTML')
 
@@ -390,12 +424,12 @@ def parse_browser_poem_text(driver, line_width):
                 continue
             padding = float(padding_match.group(1)) / 100
 
+        text = text if text else ''
         text = strip_html(text)
         text = text.replace('\t', 4*' ')
         text = delete_unprintable_characters(text)
 
         em_indices, text = get_em_indices(text)
-
         text = wrap_text(wrapper, text, em_indices)
 
         # if triple spaces, only get rid of one -- preserves poem formatting
@@ -410,10 +444,7 @@ def parse_browser_poem_text(driver, line_width):
         
         # Get poem lines as single string again
         text = '\n'.join(text)
-
         em_indices, text = get_em_indices(text)
-
         text_lines.append(TextLine(text, em_indices))
-
 
     return text_lines

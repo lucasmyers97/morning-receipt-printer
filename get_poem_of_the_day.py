@@ -19,10 +19,10 @@ and prints it using a receipt printer,
 including author headshot at the end of the poem.
 """
 
-def get_commandline_args() -> tuple[str, bool, int, int, str, int]:
+def get_commandline_args() -> tuple[str, bool, int, int, str, int, str]:
     """
-    Parses argument inputs from the commandline (only `driver_path` in this
-    case).
+    Parses argument inputs from the commandline, mostly relating to details
+    about the printer.
     """
     parser = argparse.ArgumentParser(
                         prog='GetPoemOfTheDay',
@@ -48,6 +48,9 @@ def get_commandline_args() -> tuple[str, bool, int, int, str, int]:
                         type=int,
                         help='Width of receipt line')
 
+    parser.add_argument('--poem_url',
+                        help='If you want to print a poem other than the poem of the day, you may input a url')
+
     args = parser.parse_args()
 
     return (args.driver_path, 
@@ -55,7 +58,8 @@ def get_commandline_args() -> tuple[str, bool, int, int, str, int]:
             args.vendor_id, 
             args.product_id, 
             args.printer_model, 
-            args.line_width)
+            args.line_width,
+            args.poem_url)
 
 
 def create_driver(driver_path: str) -> webdriver.Firefox:
@@ -73,9 +77,10 @@ def create_driver(driver_path: str) -> webdriver.Firefox:
     return driver
 
 
-def navigate_to_poem_of_the_day(driver: webdriver.Firefox) -> webdriver.Firefox:
+def navigate_to_poem_of_the_day(driver: webdriver.Firefox):
     """
-    Given a Selenium webdriver `driver`, navigate 
+    Given a Selenium webdriver `driver`, navigate to poem of the day, and then
+    to regular webpage that the poem is stored.
     """
     poem_of_the_day_url = 'https://www.poetryfoundation.org/poems/poem-of-the-day'
     driver.get(poem_of_the_day_url)
@@ -88,8 +93,6 @@ def navigate_to_poem_of_the_day(driver: webdriver.Firefox) -> webdriver.Firefox:
 
     driver.get(read_more_link)
 
-    return driver
-
 
 def print_border_to_receipt(printer: Usb, line_width: int):
     """
@@ -99,7 +102,9 @@ def print_border_to_receipt(printer: Usb, line_width: int):
     printer.text(line_width*'=' + '\n')
 
 
-def print_poem_info_to_receipt(printer: Usb, title: str, authors: list[str], preface: list[str] | None):
+def print_poem_info_to_receipt(printer: Usb, title: str, 
+                               authors: list[str], 
+                               preface: list[list[str]] | None):
     """
     Prints formatted `title`, list of `authors`, and `preface` for the poem
     to the receipt printer.
@@ -163,7 +168,9 @@ def print_border_to_terminal(line_width: int):
     print(line_width*'=')
 
 
-def print_poem_info_to_terminal(title: str, authors: list[str], preface: list[str] | None):
+def print_poem_info_to_terminal(title: str, 
+                                authors: list[str], 
+                                preface: list[list[str]] | None):
     """
     Prints formatted `title`, list of `authors`, and `preface` for the poem
     to the terminal.
@@ -223,11 +230,15 @@ def main():
      vendor_id, 
      product_id, 
      printer_model, 
-     line_width) = get_commandline_args()
+     line_width,
+     poem_url) = get_commandline_args()
 
     driver = create_driver(driver_path)
     try: 
-        driver = navigate_to_poem_of_the_day(driver)
+        if poem_url:
+            driver.get(poem_url)
+        else: 
+            navigate_to_poem_of_the_day(driver)
         title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
         poem_lines = parse_browser_poem_text(driver, line_width)
 
