@@ -317,7 +317,7 @@ def wrap_text(wrapper: textwrap.TextWrapper,
     cur_line_index = 0
     for j, _ in enumerate(em_indices):
         while True:
-            if em_indices[j][0] < cur_line_index + len(wrapped_text[i]):
+            if em_indices[j][0] <= cur_line_index + len(wrapped_text[i]):
                 em_indices[j][0] += index_offset
                 break
             cur_line_index += len(wrapped_text[i])
@@ -325,7 +325,7 @@ def wrap_text(wrapper: textwrap.TextWrapper,
             index_offset += 2
 
         while True:
-            if em_indices[j][1] < cur_line_index + len(wrapped_text[i]):
+            if em_indices[j][1] <= cur_line_index + len(wrapped_text[i]):
                 em_indices[j][1] += index_offset
                 break
             cur_line_index += len(wrapped_text[i])
