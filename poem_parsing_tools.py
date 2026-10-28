@@ -98,12 +98,13 @@ def parse_browser_poem_info(driver: webdriver.Firefox,
     main_content = driver.find_element(By.ID, 'mainContent')
 
     header = main_content.find_element(By.TAG_NAME, 'header')
-    title = delete_unprintable_characters(header.find_element(By.CLASS_NAME, 'type-gamma').text)
+    title = delete_unprintable_characters(header.find_element(By.TAG_NAME, 'h1').text)
     title = textwrap.wrap(title, 
                           replace_whitespace=True, 
                           width=line_width)
     title = '\n'.join(title)
-    authors = header.find_elements(By.CLASS_NAME, 'type-kappa')
+    authors = header.find_elements(By.CLASS_NAME, 'text-secondary')
+    authors = [author for author in authors if author.tag_name != 'button']
 
     author_text = [delete_unprintable_characters(author.text) for author in authors]
 
@@ -152,7 +153,8 @@ def parse_browser_poem_info(driver: webdriver.Firefox,
             image_links.append(author_image.get_attribute('src'))
         driver.close()
     except NoSuchElementException:
-        driver.close()
+        if driver.current_window_handle != original_window:
+            driver.close()
 
     driver.switch_to.window(original_window)
 
@@ -389,7 +391,7 @@ def parse_browser_poem_text(driver: webdriver.Firefox, line_width: int) -> list[
     Finally, leading whitespace is added based on justification and padding
     style tags.
     """
-    poem_body = driver.find_element(By.CLASS_NAME, 'poem-body')
+    poem_body = driver.find_element(By.CLASS_NAME, 'type-poem-text')
     poem_lines = poem_body.find_elements(By.XPATH, '*')
 
     text_lines = []
