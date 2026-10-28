@@ -9,8 +9,10 @@ from io import BytesIO
 import argparse
 import sys
 import traceback
+from playsound3 import playsound
 
 from poem_parsing_tools import TextLine, parse_browser_poem_info, parse_browser_poem_text
+from poem_audio_tools import get_audio_link
 
 from escpos.printer import Usb
 
@@ -19,7 +21,7 @@ and prints it using a receipt printer,
 including author headshot at the end of the poem.
 """
 
-def get_commandline_args() -> tuple[str, bool, int, int, str, int, str]:
+def get_commandline_args() -> tuple[str, bool, bool, int, int, str, int, str]:
     """
     Parses argument inputs from the commandline, mostly relating to details
     about the printer.
@@ -36,6 +38,9 @@ def get_commandline_args() -> tuple[str, bool, int, int, str, int, str]:
     parser.add_argument('--print_to_receipt',
                         action='store_true',
                         help='Whether to print to receipt -- alternative is to terminal.') 
+    parser.add_argument('--play_audio',
+                        action='store_true',
+                        help='Whether to play poem audio, if it exists.') 
     parser.add_argument('--vendor_id',
                         type=lambda x: int(x, 0),
                         help='Vendor ID of printer. Check `lsusb` for the first part of a number formatted as xxxx:xxxx')
@@ -55,6 +60,7 @@ def get_commandline_args() -> tuple[str, bool, int, int, str, int, str]:
 
     return (args.driver_path, 
             args.print_to_receipt, 
+            args.play_audio,
             args.vendor_id, 
             args.product_id, 
             args.printer_model, 
@@ -227,6 +233,7 @@ def main():
 
     (driver_path, 
      print_to_receipt, 
+     play_audio,
      vendor_id, 
      product_id, 
      printer_model, 
@@ -241,6 +248,7 @@ def main():
             navigate_to_poem_of_the_day(driver)
         title, authors, preface, image_links = parse_browser_poem_info(driver, line_width)
         poem_lines = parse_browser_poem_text(driver, line_width)
+
 
         if print_to_receipt:
             printer = Usb(vendor_id, product_id, profile=printer_model)
@@ -261,6 +269,15 @@ def main():
 
             for link in image_links:
                 print_image_from_link_to_terminal(link)
+
+        if play_audio:
+            try:
+                audio_link = get_audio_link(driver)
+            except:
+                audio_link = None
+
+            if audio_link:
+                playsound(audio_link)
 
         driver.quit()
     except Exception as e:
