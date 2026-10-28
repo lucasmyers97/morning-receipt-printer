@@ -153,3 +153,8 @@ Ideally the end user would not have to know how to `ssh` into a pi, or use the c
 There are cheap OLED screens w/buttons and knobs that connect to GPIO pins (or USB?) so this is a possibility. 
 
 Open to suggestions for other things to print or other features to add!
+
+## Acknowledgement
+
+I first saw the receipt printer idea via [this Instagram post](https://www.instagram.com/reel/DW_7zWSEWiB/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==), although it looks like lots of people are repurposing these printers for other things.
+The weather report in this repo is very close to that reel, but the poem-of-the-day (and the associated formatting) is distinct.
